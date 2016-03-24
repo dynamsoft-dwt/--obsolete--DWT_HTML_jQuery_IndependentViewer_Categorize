@@ -201,6 +201,7 @@
             // let the ClassOne be droppable, accepting the items
             $('.Categories').droppable({
                 accept: ".thumbContainer > li",
+                hoverClass: "ui-state-hover",
                 drop: function (event, ui) {
                     var iIndex = getCurrentIndex(ui.draggable, true);
                     CategorizeImages(ui.draggable, iIndex, this);
