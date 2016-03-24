@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Use an independent Viewer</title>
+    <script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"> </script>
+    <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"> </script>
+    <script type="text/javascript" src="Resources/dynamsoft.webtwain.viewer.js"> </script>
+    <link type="text/css" href="Scripts/jquery/jquery-ui.css" rel="stylesheet" />
+    <link type="text/css" href="Scripts/jquery/jquery.contextMenu.css" rel="stylesheet" />
+    <script src="Scripts/jquery/jquery-1.10.2.js"></script>
+    <script src="Scripts/jquery/jquery-ui.js"></script>
+    <script src="Scripts/jquery/jquery.contextMenu.js"></script>
+    <style>
+        .Categories {
+            width: 220px;
+            min-height: 80px;
+            list-style: none;
+            float: left;
+            border: 1px black solid;
+            font-size: small;
+            margin: 10px;
+        }
+
+            .Categories h4 {
+                border-bottom: 1px solid #000000;
+                background-color: #aaaaaa;
+                color: #222222;
+                font-weight: bold;
+                text-align: center;
+                margin-top: 0;
+                margin-bottom: 0;
+            }
+
+            .Categories p {
+                margin: 3px;
+                display: none;
+            }
+
+            .Categories ul {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+
+                .Categories ul li {
+                    width: 40px;
+                    margin: 0;
+                    padding: 0;
+                    margin-right: 4px;
+                    float: left;
+                }
+
+        .defaultCategory h4 {
+            background-color: #cceecc;
+        }
+
+        .selected {
+            border: 2px solid #0094ff;
+        }
+
+        .icon-centered {
+            width: 45%;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    This sample only works for modern browsers like the latest Chrome, Firefox and IE 11, Edge.<br /><br />
+    <select id="source"></select>
+    <input type="button" value="Scan" onclick="AcquireImage();" />
+    <input type="button" value="Load" onclick="LoadImage();" /><br />
+    Hide the default viewer
+    <input type="checkbox" id="hideDefaultViewer" onclick="toggleDefaultViewer()" checked="checked" />
+    Show All Images
+    <input type="checkbox" id="id-toggleViewerItems" onclick="toggleViewerItems()" />
+    <br /><br />
+    <div id="categoryContainer" style="width:250px; min-height:500px;float:left;">
+        <input type="text" id="name-newCategory" style="width: 80px; margin-top: 5px;" /><input type="button" style="width:100px" value="New Category" onclick="addACategory(document.getElementById('name-newCategory').value);" />
+        <div class="Categories ui-droppable defaultCategory selected">
+            <h4>Uncategorized Images</h4>
+            <p></p>
+            <ul></ul>
+        </div>
+    </div>
+    <div id="viewerContainer" style="width:400px;float:left;">
+        <div id="dwtViewerContainer" style="float:left; margin:20px;"></div>
+        <div id="dwtcontrolContainer" style="float:left; margin:20px;display:none;"></div>
+    </div>
+
+    <script type="text/javascript">
+        $(function () {
+            $.contextMenu({
+                selector: '.Categories',
+                build: function ($trigger, e) {
+                    return {
+                        callback: function (key, options) {
+                            var m = "clicked: " + key;
+                            console.log(m);
+                            switch (key) {
+                                case "saveAsPDF": if (saveThisCategory($trigger)) options.$menu.trigger("contextmenu:hide"); break;
+                                case "uploadAsPDF": if (uploadThisCategory($trigger)) options.$menu.trigger("contextmenu:hide"); break;
+                                default: break;
+                            }
+                        },
+                        items: {
+                            "saveAsPDF": { name: "Save As PDF", icon: "save" },
+                            "uploadAsPDF": { name: "Upload As PDF", icon: "upload" }
+                        }
+                    };
+                }
+            });
+        });
+        var objGlobal = [{
+            name: 'Uncategorized Images',
+            indexes: [],
+            imgList: $('.defaultCategory').find('ul'),
+            isDefault: true
+        }];
+        function saveThisCategory(_trigger) {
+            if (DWObject) {
+                // If no image in buffer, return the function
+                if (DWObject.HowManyImagesInBuffer == 0)
+                    return;
+                for (var o in objGlobal) {
+                    if (objGlobal[o].name == $('h4', _trigger[0]).html()) {
+                        var __indexesToSave = objGlobal[o].indexes;
+                        DWObject.SelectedImagesCount = __indexesToSave.length;
+                        for (var i = 0; i < __indexesToSave.length; i++) {
+                            DWObject.SetSelectedImageIndex(i, __indexesToSave[i] - 1);
+                        }
+                        DWObject.IfShowFileDialog = true;
+                        DWObject.SaveSelectedImagesAsMultiPagePDF('');
+                    }
+                }
+            }
+            return false;
+        }
+        function OnHttpUploadSuccess() {
+            console.log('successful');
+        }
+        function OnHttpServerReturnedSomething(errorCode, errorString, sHttpResponse) {
+            alert(errorString);
+        }
+        function uploadThisCategory(_trigger) {
+            if (DWObject) {
+                // If no image in buffer, return the function
+                if (DWObject.HowManyImagesInBuffer == 0)
+                    return;
+                DWObject.IfSSL = false; // Set whether SSL is used
+                DWObject.HTTPPort = location.port == "" ? 80 : location.port;
+
+                var CurrentPathName = unescape(location.pathname);
+                CurrentPath = CurrentPathName.substring(0, CurrentPathName.lastIndexOf("/") + 1);
+                var strActionPage = CurrentPath + "SaveToFile.aspx";
+
+                var Digital = new Date();
+                var uploadfilename = Digital.getMilliseconds(); // Uses milliseconds according to local time as the file name
+
+                // Upload the image(s) to the server asynchronously
+                for (var o in objGlobal) {
+                    if (objGlobal[o].name == $('h4', _trigger[0]).html()) {
+                        var __indexesToSave = objGlobal[o].indexes;
+                        DWObject.SelectedImagesCount = __indexesToSave.length;
+                        for (var i = 0; i < __indexesToSave.length; i++) {
+                            DWObject.SetSelectedImageIndex(i, __indexesToSave[i] - 1);
+                        }
+                    }
+                }
+                DWObject.HTTPUploadThroughPostAsMultiPagePDF(location.hostname, strActionPage, uploadfilename + ".pdf", OnHttpUploadSuccess, OnHttpServerReturnedSomething);
+            }
+            return false;
+        }
+        function addACategory(_name) {
+            var _container = $('#categoryContainer');
+            var _category = $('.defaultCategory').clone().removeClass('defaultCategory selected').html("<h4>" + _name + "</h4><p></p><ul></ul>").appendTo(_container);
+            var _objCategory = {
+                id: Dynamsoft.Lib.html5.Funs.getRandom(),
+                name: _name,
+                indexes: [],
+                imgList: _category.find('ul'),
+                isDefault: false
+            };
+            objGlobal.push(_objCategory);
+
+            $('.Categories').click(function () {
+                var _strIndexes = $('p', this).html();
+                var _aryIndexes = [], __aryIndexes_ori = _strIndexes.split(' ');
+                $('.Categories').removeClass('selected');
+                $(this).addClass('selected');
+                document.getElementById('id-toggleViewerItems').checked = false;
+                hideAllImages();
+                for (var i = 0; i < __aryIndexes_ori.length; i++) {
+                    var _item = parseInt(__aryIndexes_ori[i]);
+                    if (_item) {
+                        _aryIndexes.push(_item);
+                        $("li:nth-child(" + [_item] + ")", '.thumbContainer').show();
+                    }
+                }
+                _aryIndexes.sort(function (a, b) { return a - b; });
+            });
+            // let the ClassOne be droppable, accepting the items
+            $('.Categories').droppable({
+                accept: ".thumbContainer > li",
+                drop: function (event, ui) {
+                    var iIndex = getCurrentIndex(ui.draggable, true);
+                    CategorizeImages(ui.draggable, iIndex, this);
+                }
+            });
+            document.getElementById('name-newCategory').value = '';
+        }
+        function viewerImagesChanged(_obj) {
+            if (_obj && _obj.op && _obj.ary) {
+                switch (_obj.op) {
+                    case 'clear':
+                        for (var o in objGlobal) {
+                            objGlobal[o].indexes = [];
+                            $('li', objGlobal[o].imgList).remove();
+                        }
+                        break;
+                    case 'remove':
+                        if (_obj.ary.length) {
+                            var _aryMinusOne = [];
+                            for (var k = _obj.ary[0] + 1; k < DWObject.HowManyImagesInBuffer; k++) {
+                                _aryMinusOne.push(k + 1);
+                            }
+                            var _ind = (_obj.ary[0] + 1).toString();//the indexes in the app starts at 1
+                            for (var o in objGlobal) {
+                                if (objGlobal[o].indexes.indexOf(_ind) != -1) {
+                                    objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf(_ind), 1);
+                                    $('li', objGlobal[o].imgList).each(function () {
+                                        if ($(this)[0].iValue == _ind) {
+                                            $(this)[0].remove();
+                                        }
+                                    });
+                                }
+                            }
+                            if (_aryMinusOne.length > 0) {
+                                for (var i = 0; i < _aryMinusOne.length; i++) {
+                                    var _ind = _aryMinusOne[i].toString();
+                                    if (objGlobal[o].indexes.indexOf(_ind) != -1) {
+                                        objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf(_ind), 1, (parseInt(_ind) - 1).toString());
+                                        $('li', objGlobal[o].imgList).each(function () {
+                                            if ($(this)[0].iValue == _ind) {
+                                                $(this)[0].iValue = ($(this)[0].iValue - 1).toString();
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    case 'add':
+                        if (_obj.ary.length) {
+                            if (objGlobal[0].name = 'Uncategorized Images') {
+                                for (var i = 0; i < _obj.ary.length; i++) {
+                                    var _ind = (_obj.ary[i] + 1).toString();
+                                    if (objGlobal[0].indexes.indexOf(_ind) == -1) {
+                                        objGlobal[0].indexes.push(_ind);
+                                        var __li = document.createElement('li');
+                                        __li.iValue = _ind;
+                                        var _newLI = [__li];
+                                        var item = $("li", '.thumbContainer')[_ind - 1];
+                                        setTimeout(function () {
+                                            $(item).find('img').clone().animate({ height: "40px", width: "35px" }).appendTo(_newLI);
+                                            objGlobal[0].imgList.append(_newLI);
+                                        }, 1000);
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    case 'set': break;
+                    case 'switch':
+                        for (var o in objGlobal) {
+                            if (objGlobal[o].indexes.indexOf((_obj.ary[0] + 1).toString()) != -1) {
+                                objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf((_obj.ary[0] + 1).toString()), 1, (_obj.ary[1] + 1).toString());
+                                $('li', objGlobal[o].imgList).each(function () {
+                                    if ($(this)[0].iValue == (_obj.ary[0] + 1).toString()) {
+                                        $(this)[0].iValue = (_obj.ary[1] + 1).toString();
+                                    }
+                                });
+                            }
+                            else if (objGlobal[o].indexes.indexOf((_obj.ary[1] + 1).toString()) != -1) {
+                                objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf((_obj.ary[1] + 1).toString()), 1, (_obj.ary[0] + 1).toString());
+                                $('li', objGlobal[o].imgList).each(function () {
+                                    if ($(this)[0].iValue == (_obj.ary[1] + 1).toString()) {
+                                        $(this)[0].iValue = (_obj.ary[0] + 1).toString();
+                                    }
+                                });
+                            }
+                        }
+                        break;
+                    case 'move':
+                        var _aryPlusOne = [], _aryMinusOne = [];
+                        if (_obj.ary[0] > _obj.ary[1]) {
+                            var __i = _obj.ary[0] - 1;
+                            while (__i >= _obj.ary[1]) {
+                                _aryPlusOne.push(__i + 1);
+                                __i--;
+                            }
+                        } else {
+                            var __i = _obj.ary[0] + 1;
+                            while (__i <= _obj.ary[1]) {
+                                _aryMinusOne.push(__i + 1);
+                                __i++;
+                            }
+                        }
+                        var _objWhichContainsTheMovedImage = null;
+                        for (var o in objGlobal) {
+                            if (objGlobal[o].indexes.indexOf((_obj.ary[0] + 1).toString()) != -1) {
+                                objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf((_obj.ary[0] + 1).toString()), 1);
+                                _objWhichContainsTheMovedImage = objGlobal[o];
+                                $('li', objGlobal[o].imgList).each(function () {
+                                    if ($(this)[0].iValue == (_obj.ary[0] + 1).toString()) {
+                                        $(this)[0].iValue = (_obj.ary[1] + 1).toString();
+                                    }
+                                });
+                            }
+                            if (_aryPlusOne.length > 0) {
+                                for (var i = 0; i < _aryPlusOne.length; i++) {
+                                    var _ind = _aryPlusOne[i].toString();
+                                    if (objGlobal[o].indexes.indexOf(_ind) != -1) {
+                                        objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf(_ind), 1, (parseInt(_ind) + 1).toString());
+                                    }
+                                    $('li', objGlobal[o].imgList).each(function () {
+                                        if ($(this)[0].iValue == _ind) {
+                                            $(this)[0].iValue = (parseInt(_ind) + 1).toString();
+                                        }
+                                    });
+                                }
+                            }
+                            else if (_aryMinusOne.length > 0) {
+                                for (var i = 0; i < _aryMinusOne.length; i++) {
+                                    var _ind = _aryMinusOne[i].toString();
+                                    if (objGlobal[o].indexes.indexOf(_ind) != -1) {
+                                        objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf(_ind), 1, (parseInt(_ind) - 1).toString());
+                                    }
+                                    $('li', objGlobal[o].imgList).each(function () {
+                                        if ($(this)[0].iValue == _ind) {
+                                            $(this)[0].iValue = (parseInt(_ind) - 1).toString();
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        _objWhichContainsTheMovedImage.indexes.push((_obj.ary[1] + 1).toString());
+                        break;
+                }
+            }
+            updateIndexes();
+            $("li", '.thumbContainer').addClass("ui-draggable");
+            $("li", '.thumbContainer').draggable({
+                revert: "invalid",
+                containment: "document",
+                helper: "clone",
+                stop: function (event, ui) {
+                }
+            });
+        }
+        function CategorizeImages($item, _iIndex, _this) {
+            var __this = _this, __iIndex = _iIndex.toString();
+            $item.hide(function () {
+                for (var o in objGlobal) {
+                    if (objGlobal[o].name == $('h4', _this).html()) {
+                        objGlobal[o].indexes.push(__iIndex);
+                        var __li = document.createElement('li');
+                        __li.iValue = __iIndex;
+                        var _newLI = [__li];
+                        $item.find('img').clone().animate({ height: "40px", width: "35px" }).appendTo(_newLI);
+                        objGlobal[o].imgList.append(_newLI);
+                    }
+                    else if (objGlobal[o].indexes.indexOf(__iIndex) != -1) {
+                        objGlobal[o].indexes.splice(objGlobal[o].indexes.indexOf(__iIndex), 1);
+                        $('li', objGlobal[o].imgList).each(function () {
+                            if ($(this)[0].iValue == __iIndex) {
+                                $(this)[0].remove();
+                            }
+                        });
+                    }
+                }
+                updateIndexes();
+            });
+        }
+        function updateIndexes() {
+            for (var o in objGlobal) {
+                objGlobal[o].indexes.sort(function (a, b) { return a - b; });
+                $('li', objGlobal[o].imgList).sortElements(function (a, b) {
+                    return a.iValue - b.iValue;
+                });
+                for (var i = 0; i < $('h4', '.Categories').length; i++) {
+                    var _tempName = $('h4', '.Categories')[i].innerHTML;
+                    if (objGlobal[o].name == _tempName) {
+                        var _tempHTML = '';
+                        for (var j = 0; j < objGlobal[o].indexes.length; j++) {
+                            _tempHTML = _tempHTML + objGlobal[o].indexes[j] + ' ';
+                        }
+                        _tempHTML = _tempHTML.trim();
+                        $('p', '.Categories')[i].innerHTML = _tempHTML;
+                    }
+                }
+            }
+        }
+        function toggleViewerItems() {
+            var _flag = document.getElementById('id-toggleViewerItems').checked;
+            if (_flag) {
+                showAllImages();
+            } else {
+                hideAllImages();
+            }
+        }
+        function showAllImages() {
+            $("li", '.thumbContainer').show();
+        }
+        function hideAllImages() {
+            $("li", '.thumbContainer').hide();
+        }
+        var DWObject;
+        function Dynamsoft_OnReady() {
+            DWObject = Dynamsoft.WebTwainEnv.GetWebTwain('dwtcontrolContainer');
+            if (DWObject) {
+                document.getElementById('dwtcontrolContainer').style.display = 'none';
+                DWObject.SetViewMode(3, 3);
+                document.getElementById("source").style.display = "";
+                var count = DWObject.SourceCount;
+                for (var i = 0; i < count; i++)
+                    document.getElementById("source").options.add(new Option(DWObject.GetSourceNameItems(i), i));  // Add the sources in a drop-down list
+            }
+            (function (obj) {
+                var _view_cfg = {
+                    //data source (it must be a DWT instance
+                    DWObject: obj,
+                    //Holding DIV
+                    containerID: 'dwtViewerContainer',
+                    //Dimensions
+                    width: 270,
+                    height: 350,
+                    //Ouput debug info
+                    debug: false,
+                    //Event callbacks
+                    onMouseClick: function () { },
+                    onMouseDoubleClick: function () { },
+                    onMouseMove: function () { },
+                    onMouseRightClick: function () { },
+                    onRefreshUI: function () { },
+                    onSelected: function () { },
+                    onViewerItemsChanged: viewerImagesChanged
+                }
+                obj._IndependentViewer = new DynamsoftViewerInner.UI.ImageUIView(_view_cfg);
+            })(DWObject);
+        }
+
+        function toggleDefaultViewer() {
+            var _flag = document.getElementById('hideDefaultViewer').checked;
+            if (_flag) {
+                document.getElementById('dwtcontrolContainer').style.display = 'none';
+            }
+            else {
+                document.getElementById('dwtcontrolContainer').style.display = '';
+            }
+        }
+
+        function AcquireImage() {
+            if (DWObject) {
+                var bSelected = DWObject.SelectSourceByIndex(document.getElementById("source").selectedIndex);
+                if (bSelected) {
+                    var OnAcquireImageSuccess, OnAcquireImageFailure;
+                    OnAcquireImageSuccess = OnAcquireImageFailure = function () {
+                        DWObject.CloseSource();
+                    };
+
+                    DWObject.OpenSource();
+                    DWObject.IfDisableSourceAfterAcquire = true;
+                    DWObject.AcquireImage(OnAcquireImageSuccess, OnAcquireImageFailure);
+                }
+            }
+        }
+
+        //Callback functions for async APIs
+        function OnSuccess() {
+            console.log('successful');
+        }
+
+        function OnFailure(errorCode, errorString) {
+            alert(errorString);
+        }
+
+        function LoadImage() {
+            if (DWObject) {
+                DWObject.IfShowFileDialog = true; // Open the system's file dialog to load image
+                DWObject.LoadImageEx("", EnumDWT_ImageType.IT_ALL, OnSuccess, OnFailure); // Load images in all supported formats (.bmp, .jpg, .tif, .png, .pdf). OnSuccess or OnFailure will be called after the operation
+            }
+        }
+        function getCurrentIndex(objCurrentThumb, isLI) {
+            var iIndex;
+            Dynamsoft.Lib.env.bFirefox
+                ? iIndex = objCurrentThumb[0].parentNode.lastChild.textContent
+                : iIndex = objCurrentThumb[0].parentElement.lastChild.innerText;
+            if (isLI) {
+                Dynamsoft.Lib.env.bFirefox
+                ? iIndex = objCurrentThumb[0].lastChild.textContent
+                : iIndex = objCurrentThumb[0].lastChild.innerText;
+            }
+            return iIndex;
+        }
+        function findEndIndex(iIndex) {
+            var n = $('.thumb').length;
+            for (var i = 0; i < n; i++) {
+                var temp;
+                Dynamsoft.Lib.env.bFirefox
+                ? temp = $('.thumb')[i].lastChild.textContent
+                : temp = $('.thumb')[i].lastChild.innerText
+                if (temp == iIndex) {
+                    return i;
+                }
+            }
+        }
+
+        /**
+         * jQuery.fn.sortElements
+         * --------------
+         * @param Function comparator:
+         *   Exactly the same behaviour as [1,2,3].sort(comparator)
+         *
+         * @param Function getSortable
+         *   A function that should return the element that is
+         *   to be sorted. The comparator will run on the
+         *   current collection, but you may want the actual
+         *   resulting sort to occur on a parent or another
+         *   associated element.
+         *
+         *   E.g. $('td').sortElements(comparator, function(){
+         *      return this.parentNode;
+         *   })
+         *
+         *   The <td>'s parent (<tr>) will be sorted instead
+         *   of the <td> itself.
+         */
+        jQuery.fn.sortElements = (function () {
+            var sort = [].sort;
+            return function (comparator, getSortable) {
+                getSortable = getSortable || function () { return this; };
+                var placements = this.map(function () {
+                    var sortElement = getSortable.call(this),
+                        parentNode = sortElement.parentNode,
+                        // Since the element itself will change position, we have
+                        // to have some way of storing its original position in
+                        // the DOM. The easiest way is to have a 'flag' node:
+                        nextSibling = parentNode.insertBefore(
+                            document.createTextNode(''),
+                            sortElement.nextSibling
+                        );
+                    return function () {
+                        if (parentNode === this) {
+                            throw new Error(
+                                "You can't sort elements if any one is a descendant of another."
+                            );
+                        }
+                        // Insert before flag:
+                        parentNode.insertBefore(this, nextSibling);
+                        // Remove flag:
+                        parentNode.removeChild(nextSibling);
+                    };
+                });
+                return sort.call(this, comparator).each(function (i) {
+                    placements[i].call(getSortable.call(this));
+                });
+            };
+        })();
+    </script>
+</body>
+</html>
