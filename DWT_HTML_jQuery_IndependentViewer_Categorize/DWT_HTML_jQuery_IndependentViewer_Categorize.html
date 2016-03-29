@@ -11,14 +11,23 @@
     <script src="Scripts/jquery/jquery-ui.js"></script>
     <script src="Scripts/jquery/jquery.contextMenu.js"></script>
     <style>
+        .notDisplayed {
+            display: none;
+        }
+
+        .displayed {
+            display: block;
+        }
+
         .Categories {
-            width: 220px;
-            min-height: 80px;
+            width: 240px;
+            height: 100px;
             list-style: none;
             float: left;
             border: 1px black solid;
             font-size: small;
             margin: 10px;
+            overflow-y: scroll;
         }
 
             .Categories h4 {
@@ -48,7 +57,26 @@
                     padding: 0;
                     margin-right: 4px;
                     float: left;
+                    position: relative;
                 }
+
+
+
+                    .Categories ul li div {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        width: 35px;
+                        height: 40px;
+                        z-index: 10;
+                        background: url("Scripts/jquery/images/recycle.png") no-repeat center;
+                        background-color: rgba(204,238,204,0.5);
+                        display: none;
+                    }
+
+                    .Categories ul li:hover div {
+                        display: block;
+                    }
 
         .defaultCategory h4 {
             background-color: #cceecc;
@@ -62,6 +90,29 @@
             width: 45%;
             text-align: center;
         }
+
+        #categoryContainer {
+            list-style: none;
+            padding: 0;
+            min-width: 25px;
+            min-height: 390px;
+            float: left;
+        }
+
+            #categoryContainer > li {
+                width: 150px;
+                height: 16px;
+            }
+
+            #categoryContainer .closedfolder {
+                background: url("Scripts/jquery/images/foldericon.gif") no-repeat 5px 50%;
+                padding-left: 23px;
+            }
+
+            #categoryContainer .openfolder {
+                background: url("Scripts/jquery/images/openfoldericon.gif") no-repeat 5px 50%;
+                padding-left: 23px;
+            }
     </style>
 </head>
 <body>
@@ -73,22 +124,27 @@
     <input type="checkbox" id="hideDefaultViewer" onclick="toggleDefaultViewer()" checked="checked" />
     Show All Images
     <input type="checkbox" id="id-toggleViewerItems" onclick="toggleViewerItems()" />
+    <input type="text" id="name-newCategory" style="width: 80px; margin-top: 5px;" />
+    <input type="button" style="width:100px" value="New Category" onclick="addACategory(document.getElementById('name-newCategory').value);" />
     <br /><br />
-    <div id="categoryContainer" style="width:250px; min-height:500px;float:left;">
-        <input type="text" id="name-newCategory" style="width: 80px; margin-top: 5px;" /><input type="button" style="width:100px" value="New Category" onclick="addACategory(document.getElementById('name-newCategory').value);" />
-        <div class="Categories ui-droppable defaultCategory selected">
-            <h4>Uncategorized Images</h4>
-            <p></p>
-            <ul></ul>
-        </div>
-    </div>
+
+    <ul id="categoryContainer">
+        <li class="closedfolder folderLI">
+            <h5 class="displayed defaultCaption">Uncategorized Images</h5>
+            <div class="Categories ui-droppable defaultCategory selected notDisplayed">
+                <h4>Uncategorized Images</h4>
+                <p></p>
+                <ul></ul>
+            </div>
+        </li>
+    </ul>
     <div id="viewerContainer" style="width:400px;float:left;">
         <div id="dwtViewerContainer" style="float:left; margin:20px;"></div>
         <div id="dwtcontrolContainer" style="float:left; margin:20px;display:none;"></div>
     </div>
 
     <script type="text/javascript">
-        $(function () {
+        $(document).ready(function () {
             $.contextMenu({
                 selector: '.Categories',
                 build: function ($trigger, e) {
@@ -107,6 +163,20 @@
                             "uploadAsPDF": { name: "Upload As PDF", icon: "upload" }
                         }
                     };
+                }
+            });
+            $('.folderLI').off('click').on('click', function () {
+                if ($(this).hasClass('closedfolder')) {
+                    $(this).removeClass('closedfolder').addClass('openfolder');
+                    $(this).animate({ height: "120px", width: "260px" });
+                    $('div', $(this)).removeClass('notDisplayed');
+                    $('h5', this).addClass('notDisplayed').removeClass('displayed');
+                }
+                else if ($(this).hasClass('openfolder')) {
+                    $(this).removeClass('openfolder').addClass('closedfolder');
+                    $(this).animate({ height: "16px", width: "150px" });
+                    $('div', $(this)).addClass('notDisplayed');
+                    $('h5', this).removeClass('notDisplayed').addClass('displayed');
                 }
             });
         });
@@ -172,17 +242,48 @@
         }
         function addACategory(_name) {
             var _container = $('#categoryContainer');
-            var _category = $('.defaultCategory').clone().removeClass('defaultCategory selected').html("<h4>" + _name + "</h4><p></p><ul></ul>").appendTo(_container);
+            var __li = document.createElement('li');
+            __li.strName = _name;
+            __li.className = 'closedfolder folderLI';
+            var _newLI = [__li];
+            $('.defaultCaption').clone().removeClass('defaultCaption notDisplayed').addClass('displayed').html(_name).appendTo(_newLI);
+            var _category = $('.defaultCategory').clone().removeClass('defaultCategory selected displayed').addClass('notDisplayed').html("<h4>" + _name + "</h4><p></p><ul></ul>").appendTo(_newLI);
+            _container.append(_newLI);
             var _objCategory = {
                 id: Dynamsoft.Lib.html5.Funs.getRandom(),
                 name: _name,
                 indexes: [],
                 imgList: _category.find('ul'),
-                isDefault: false
+                isDefault: false,
+                isCategoryClicked: false
             };
             objGlobal.push(_objCategory);
+            // let the ClassOne be droppable, accepting the items
+            $('.Categories').droppable({
+                accept: ".thumbContainer > li",
+                hoverClass: "ui-state-hover",
+                drop: function (event, ui) {
+                    var iIndex = getCurrentIndex(ui.draggable, true);
+                    CategorizeImages(ui.draggable, iIndex, this);
+                }
+            });
 
-            $('.Categories').click(function () {
+            $('.folderLI').off('click').on('click', function () {
+                if ($(this).hasClass('closedfolder')) {
+                    $('h5', this).addClass('notDisplayed').removeClass('displayed');
+                    $(this).removeClass('closedfolder').addClass('openfolder');
+                    $(this).animate({ height: "120px", width: "260px" });
+                    $('div', $(this)).removeClass('notDisplayed');
+                }
+                else if ($(this).hasClass('openfolder')) {
+                    $('h5', this).removeClass('notDisplayed').addClass('displayed');
+                    $(this).removeClass('openfolder').addClass('closedfolder');
+                    $(this).animate({ height: "16px", width: "150px" });
+                    $('div', $(this)).addClass('notDisplayed');
+                }
+            });
+            $('.Categories').off('click').on('click', function (event) {
+                event.stopPropagation();
                 var _strIndexes = $('p', this).html();
                 var _aryIndexes = [], __aryIndexes_ori = _strIndexes.split(' ');
                 $('.Categories').removeClass('selected');
@@ -197,15 +298,6 @@
                     }
                 }
                 _aryIndexes.sort(function (a, b) { return a - b; });
-            });
-            // let the ClassOne be droppable, accepting the items
-            $('.Categories').droppable({
-                accept: ".thumbContainer > li",
-                hoverClass: "ui-state-hover",
-                drop: function (event, ui) {
-                    var iIndex = getCurrentIndex(ui.draggable, true);
-                    CategorizeImages(ui.draggable, iIndex, this);
-                }
             });
             document.getElementById('name-newCategory').value = '';
         }
@@ -261,10 +353,17 @@
                                         __li.iValue = _ind;
                                         var _newLI = [__li];
                                         var item = $("li", '.thumbContainer')[_ind - 1];
-                                        setTimeout(function () {
-                                            $(item).find('img').clone().animate({ height: "40px", width: "35px" }).appendTo(_newLI);
-                                            objGlobal[0].imgList.append(_newLI);
-                                        }, 1000);
+
+                                        var _showImage_ = function () {
+                                            if ($(item).find('img')[0]) {
+                                                $(item).find('img').clone().animate({ height: "40px", width: "35px" }).appendTo(_newLI);
+                                                objGlobal[0].imgList.append(_newLI);
+                                            }
+                                            else {
+                                                setTimeout(_showImage_, 100);
+                                            }
+                                        };
+                                        setTimeout(_showImage_, 100);
                                     }
                                 }
                             }
@@ -358,6 +457,31 @@
                 }
             });
         }
+
+        function recycleThisImage(_oCategory, _iIndex) {
+            _oCategory = _oCategory.toString();
+            _iIndex = _iIndex.toString();
+            if (objGlobal[_oCategory].indexes.indexOf(_iIndex) != -1) {
+                objGlobal[_oCategory].indexes.splice(objGlobal[_oCategory].indexes.indexOf(_iIndex), 1);
+                $('li', objGlobal[_oCategory].imgList).each(function () {
+                    if ($(this)[0].iValue == _iIndex) {
+                        $(this)[0].remove();
+                    }
+                });
+            }
+            if (objGlobal[0].name = 'Uncategorized Images') {
+                if (objGlobal[0].indexes.indexOf(_iIndex) == -1) {
+                    objGlobal[0].indexes.push(_iIndex);
+                    var __li = document.createElement('li');
+                    __li.iValue = _iIndex;
+                    var _newLI = [__li];
+                    var item = $("li", '.thumbContainer')[_iIndex - 1];
+                    $(item).find('img').clone().animate({ height: "40px", width: "35px" }).appendTo(_newLI);
+                    objGlobal[0].imgList.append(_newLI);
+                }
+            }
+            updateIndexes();
+        }
         function CategorizeImages($item, _iIndex, _this) {
             var __this = _this, __iIndex = _iIndex.toString();
             $item.hide(function () {
@@ -367,7 +491,9 @@
                         var __li = document.createElement('li');
                         __li.iValue = __iIndex;
                         var _newLI = [__li];
+                        var _recycle_icon = "<div onclick='recycleThisImage(" + o + "," + __iIndex + ")' title='Recycle this image'></div>";
                         $item.find('img').clone().animate({ height: "40px", width: "35px" }).appendTo(_newLI);
+                        $(_newLI).append(_recycle_icon);
                         objGlobal[o].imgList.append(_newLI);
                     }
                     else if (objGlobal[o].indexes.indexOf(__iIndex) != -1) {
